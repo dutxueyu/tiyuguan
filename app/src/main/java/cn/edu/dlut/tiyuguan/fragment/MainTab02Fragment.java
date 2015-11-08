@@ -5,17 +5,26 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 
+import cn.edu.dlut.tiyuguan.activity.MakeReserveActivity;
 import cn.edu.dlut.tiyuguan.adapterview.MyListView.OnRefreshListener;
 import cn.edu.dlut.tiyuguan.activity.GotoOrderActivity;
 import cn.edu.dlut.tiyuguan.activity.MainActivity;
+import cn.edu.dlut.tiyuguan.base.BaseAuth;
+import cn.edu.dlut.tiyuguan.base.BaseTaskPool;
+import cn.edu.dlut.tiyuguan.global.NameConstant;
 import cn.edu.dlut.tiyuguan.global.UserInfo;
 import cn.edu.dlut.tiyuguan.global.VenueInfo;
 import cn.edu.dlut.tiyuguan.internet.RefreshVenueInfo;
 
 import cn.edu.dlut.tiyuguan.adapterview.MyListView;
 import cn.edu.dlut.tiyuguan.R;
+import cn.edu.dlut.tiyuguan.model.Sport;
+import cn.edu.dlut.tiyuguan.task.QueryVenuesInfoTask;
+import cn.edu.dlut.tiyuguan.util.AppUtil;
+import cn.edu.dlut.tiyuguan.util.ToastUtil;
 
 import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentTransaction;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,37 +43,13 @@ public class MainTab02Fragment extends Fragment{
 			R.drawable.taiqiu,R.drawable.yumao,R.drawable.ping};
 	int[] nameIds={R.string.bask,R.string.swim,
 			R.string.taiqiu,R.string.yumao,R.string.ping};
-
 	 View messageLayout;
      MyListView mListView;
      MyAdapter myAdapter;
 
-	public  Handler parentHandler=new Handler()
-	{
-		@Override
-		public void handleMessage(Message msg) {
-			// TODO Auto-generated method stub
-			super.handleMessage(msg);
-			if(msg.what==0x1234)
-			{
-				//交给全局类去处理这个字符串
-				String str=msg.obj.toString();
-				//Toast.makeText(getBaseContext(),str, Toast.LENGTH_LONG).show();
-				if(str.equals("false"))
-				{
-					
-				}
-				else
-				{
-				   VenueInfo.setVenueInfo(str);
-				}
-			}
-			
-		}
-		
-	};
-	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState)
-	{
+    AsyncTask<String,Void,String> refreshTask;
+
+	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
         messageLayout = inflater.inflate(R.layout.main_tab_02, container, false);
         initView();
@@ -72,6 +57,7 @@ public class MainTab02Fragment extends Fragment{
 		 return messageLayout;
 	}
 
+    /****/
     private void initView() {
 
         mListView = (MyListView)messageLayout.findViewById(R.id.ListView01);
@@ -84,33 +70,38 @@ public class MainTab02Fragment extends Fragment{
             public void onItemClick(AdapterView<?> arg0, View arg1, int postion,
                                     long arg3) {
                 // TODO Auto-generated method stub
-                //实例化将要跳转到预定界面的Intent
-                Intent intent=new Intent((MainActivity)getActivity(),GotoOrderActivity.class);
-                switch(postion)
-                {
+                //if user is not login
+                if(!BaseAuth.isLogin()){
+                    ToastUtil.showInfoToast(getActivity(),"未登录，请您登陆再操作！");
+                    ((MainActivity)getActivity()).switchFragment("我的");
+                    return;
+                }
+                Intent intent = new Intent(getActivity(),MakeReserveActivity.class);
+                AppUtil.debugV("====TAG====","选择的ListView Index" + postion);
+                switch(postion) {
                     //篮球预约
                     case 1:
-                        intent.putExtra("index", 1);
+                        intent.putExtra("venues_id", 1);
                         startActivity(intent);
                         break;
                     //游泳
                     case 2:
-                        intent.putExtra("index", 2);
+                        intent.putExtra("venues_id", 3);
                         startActivity(intent);
                         break;
                     //台球
                     case 3:
-                        intent.putExtra("index", 3);
+                        intent.putExtra("venues_id", 4);
                         startActivity(intent);
                         break;
                     //羽毛球
                     case 4:
-                        intent.putExtra("index", 4);
+                        intent.putExtra("venues_id", 2);
                         startActivity(intent);
                         break;
                     //乒乓球
                     case 5:
-                        intent.putExtra("index", 5);
+                        intent.putExtra("venues_id", 5);
                         startActivity(intent);
                         break;
                 }
@@ -121,29 +112,39 @@ public class MainTab02Fragment extends Fragment{
 
             @Override
             public void onRefresh() {
-                new AsyncTask<Void, Void, Void>() {
-                    protected Void doInBackground(Void... params) {
+                if(Sport.getInstance().getVenuesHashMap() == null
+                        ||
+                        Sport.getInstance().getVenuesHashMap().size() == 0
+                        )
+                    BaseTaskPool
+                            .getInstance()
+                            .addTask(new QueryVenuesInfoTask(NameConstant.api.queryVenuesInfo));
+
+                if(refreshTask != null && refreshTask.getStatus() == AsyncTask.Status.RUNNING)
+                    refreshTask.cancel(true);
+                String queryUrl = "";
+                refreshTask =  new AsyncTask<String, Void, String>() {
+                    protected String doInBackground(String... params) {
                         try {
                             Thread.sleep(1000);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
-                        //      list.add("刷新后添加的内容");
-                        RefreshVenueInfo.doRefreshVenueInfo(UserInfo.httpClient, parentHandler);
                         return null;
                     }
 
                     @Override
-                    protected void onPostExecute(Void result) {
+                    protected void onPostExecute(String result) {
                         myAdapter.notifyDataSetChanged();
                         mListView.onRefreshComplete();
                     }
-                }.execute(null, null, null);
+                };
+                refreshTask.execute(queryUrl, null, null);
             }
         });
     }
 
-    /*自定义适配器*/
+    /**自定义适配器**/
     class MyAdapter extends  BaseAdapter{
 
 
@@ -164,7 +165,7 @@ public class MainTab02Fragment extends Fragment{
 
         @Override
         public View getView(int position, View convertView, ViewGroup viewGroup) {
-            ViewHolder viewHolder = null;
+            ViewHolder viewHolder;
             if(convertView == null){
                 viewHolder = new ViewHolder();
                 convertView = LayoutInflater.from(getActivity()).inflate(R.layout.main_tab_02_listview_item,null);
@@ -172,14 +173,15 @@ public class MainTab02Fragment extends Fragment{
                 viewHolder.textView = (TextView)convertView.findViewById(R.id.id_main_tab_02_listview_item_text_view);
                 viewHolder.numTextView = (TextView)convertView.findViewById(R.id.id_main_tab_02_istview_item_num_textview);
                 convertView.setTag(viewHolder);
-
             }
             else{
                 viewHolder = (ViewHolder)convertView.getTag();
             }
+            //fulfill view with data
             viewHolder.imageView.setImageResource(drawableIds[position]);
             viewHolder.textView.setText(nameIds[position]);
             viewHolder.numTextView.setText((int)(50 * Math.random()) + "");
+
             return convertView;
         }
     }
